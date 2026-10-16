@@ -6,6 +6,10 @@ A self-hosted AI workspace, maintained here as **cloud67**.
 
 This repository starts from [Odysseus](https://github.com/odysseus-dev/odysseus), with its existing application, integrations, tests, documentation, assets, and Git history preserved. Original authors retain credit for their work. Cloud67 development builds on that foundation under **AGPL-3.0-or-later**; see [LICENSE](LICENSE), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md), and [UPSTREAM.md](UPSTREAM.md).
 
+<p align="center">
+  <img src="assets/branding/odysseus-wordmark.png" alt="Odysseus" width="238">
+</p>
+
 ```bash
 git clone https://github.com/sriram369/cloud67.git
 cd cloud67
@@ -16,10 +20,6 @@ The upstream setup instructions follow below. Existing application branding, ima
 ---
 
 ## Upstream documentation
-
-<p align="center">
-  <img src="assets/branding/odysseus-wordmark.png" alt="Odysseus" width="238">
-</p>
 
 <p align="center">
   A self-hosted AI workspace for chat, agents, research, documents, email, notes, calendar, and local model workflows.
