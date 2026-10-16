@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Identify runner HTTP requests as Cloud67 so Cloudflare accepts the service client.
+
 ## 0.1.0 — 2026-10-16
 
 - Deploy an authenticated Cloudflare-native dashboard alongside the preserved Odysseus app.
