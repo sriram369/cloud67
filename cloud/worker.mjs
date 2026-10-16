@@ -149,7 +149,7 @@ async function handle(request, env) {
   if(match) {
     const input=await body(request), task=await activeTask(env,match[1],input.lease);
     if(match[2]==='heartbeat') {await query(env,'UPDATE tasks SET lease_until=?,updated_at=? WHERE id=? AND lease=?',now()+900,now(),task.id,input.lease).run();return reply({ok:true});}
-    if(match[2]==='model') return reply(await generate(env,input.messages));
+    if(match[2]==='model') return reply(await generate(env,input.messages,{structured:true}));
     if(match[2]==='events') {await event(env,task.id,text(input.kind,40,'event kind'),text(input.content,12000,'event content'));return reply({ok:true});}
     if(match[2]==='authorize-publication') return reply({ok:true});
     if(match[2]==='finish') {
