@@ -1,0 +1,48 @@
+name: Cloud67 coding runner
+on:
+  push:
+    paths: ['cloud/**', '.github/workflows/cloud67-agent.yml']
+  pull_request:
+    paths: ['cloud/**', '.github/workflows/cloud67-agent.yml']
+  workflow_dispatch:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+permissions: {}
+concurrency:
+  group: cloud67-coding-runner
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Validate runner and free-routing tests
+        run: |
+          node --test cloud/test/*.test.mjs
+          python3 -m unittest discover -s cloud/test -p 'test_*.py' -v
+  run-task:
+    needs: verify
+    if: github.repository == 'sriram369/cloud67' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Process one repository task
+        env:
+          CLOUD67_URL: ${{ vars.CLOUD67_URL }}
+          CLOUD67_RUNNER_TOKEN: ${{ secrets.CLOUD67_RUNNER_TOKEN }}
+          CLOUD67_BASE_BRANCH: dev
+          GH_TOKEN: ${{ github.token }}
+        run: python3 cloud/runner.py

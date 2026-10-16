@@ -2,6 +2,8 @@
 
 A self-hosted AI workspace, maintained here as **cloud67**.
 
+**Free cloud edition:** [Open cloud67](https://cloud67.thotasriramnaidu.workers.dev) · [Cloud deployment and runner docs](cloud/README.md). This initial cloud-native edition provides authenticated threads, free-only AI routing, and scoped coding jobs. The original Odysseus application remains below with its own hosting requirements.
+
 This repository starts from [Odysseus](https://github.com/odysseus-dev/odysseus), with its existing application, integrations, tests, documentation, assets, and Git history preserved. Original authors retain credit for their work. Cloud67 development builds on that foundation under **AGPL-3.0-or-later**; see [LICENSE](LICENSE), [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md), and [UPSTREAM.md](UPSTREAM.md).
 
 ```bash
