@@ -11,6 +11,7 @@ venv/
 *.egg
 
 # Environment
+.cloud67/
 .env
 .env.bak.*
 !.env.example

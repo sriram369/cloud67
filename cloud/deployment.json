@@ -1,0 +1,14 @@
+{
+  "name": "cloud67",
+  "compatibility_date": "2026-10-16",
+  "main_module": "worker.mjs",
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  },
+  "vars": {
+    "REPOSITORY": "sriram369/cloud67",
+    "RUNNER_ENABLED": "false"
+  }
+}
