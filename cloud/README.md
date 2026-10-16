@@ -6,7 +6,7 @@ An initial Cloudflare-native release alongside the preserved Odysseus applicatio
 
 - Cloudflare Worker: owner login, dashboard, chat, task API, free-only inference routing.
 - D1: threads, messages, task state, execution leases, event history, usage reservations.
-- Workers AI: a fixed model with bounded context/output and ten application calls per UTC day.
+- Workers AI: a fixed model with bounded context/output and fifteen application calls per UTC day. Coding actions use a JSON schema; chat uses plain text.
 - OpenRouter: optional fallback using only `openrouter/free`. Current zero pricing must be verified before inference; zero-price provider bounds are also sent. Twenty application calls per UTC day. Provider limits are separate.
 - GitHub Actions: one bounded repository coding job per run on a standard Ubuntu runner. Scheduled starts are best-effort, not an immediate execution guarantee. No paid runner, artifact uploads, or cache allocation is configured.
 

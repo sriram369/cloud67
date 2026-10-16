@@ -1,5 +1,5 @@
 export const CF_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-export const CF_DAILY_CALLS = 10;
+export const CF_DAILY_CALLS = 15;
 export const OPENROUTER_DAILY_CALLS = 20;
 export const MAX_PROMPT_BYTES = 12000;
 export const MAX_OUTPUT_TOKENS = 1024;
@@ -50,15 +50,17 @@ async function boundedJson(response, limit = 2_000_000) {
   try { return JSON.parse(new TextDecoder().decode(joined)); } catch { throw new RouteError('Provider returned invalid JSON.'); }
 }
 
-export async function generate(env, input, { fetcher = fetch, reserveCall = reserve } = {}) {
+export async function generate(env, input, { fetcher = fetch, reserveCall = reserve, structured = false } = {}) {
   const messages = validateMessages(input);
   const failures = [];
+  const actionFormat = structured ? { type:'json_schema', json_schema:{type:'object',properties:{action:{type:'string',enum:['list_files','read_file','write_file','run_tests','finish']},path:{type:'string'},content:{type:'string'},summary:{type:'string'}},required:['action'],additionalProperties:false} } : undefined;
   // Fixed model and conservative byte/output/call caps. No user-supplied model IDs.
   if (env.AI && await reserveCall(env.DB, 'cloudflare', CF_DAILY_CALLS)) {
     try {
-      const result = await env.AI.run(CF_MODEL, { messages, max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.2 });
-      if (typeof result.response === 'string' && result.response.trim()) {
-        return { content: result.response, model: CF_MODEL, provider: 'cloudflare', usage: result.usage || null };
+      const result = await env.AI.run(CF_MODEL, { messages, max_tokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...(actionFormat ? {response_format:actionFormat} : {}) });
+      const content=structured && result.response && typeof result.response==='object' && !Array.isArray(result.response) ? JSON.stringify(result.response) : result.response;
+      if (typeof content === 'string' && content.trim()) {
+        return { content, model: CF_MODEL, provider: 'cloudflare', usage: result.usage || null };
       }
       failures.push('Cloudflare returned no text');
     } catch { failures.push('Cloudflare unavailable'); }
@@ -81,7 +83,8 @@ export async function generate(env, input, { fetcher = fetch, reserveCall = rese
       method: 'POST', signal: AbortSignal.timeout(90000),
       headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json', 'X-Title': 'cloud67' },
       body: JSON.stringify({ model: 'openrouter/free', messages, max_tokens: MAX_OUTPUT_TOKENS,
-        provider: { max_price: { prompt: 0, completion: 0 } } }),
+        ...(structured ? {response_format:{type:'json_object'}} : {}),
+        provider: { max_price: { prompt: 0, completion: 0 }, ...(structured ? {require_parameters:true} : {}) } }),
     });
     if (!response.ok) throw new RouteError(`Free OpenRouter request unavailable (${response.status}). Paid fallback is disabled.`, response.status === 429 ? 429 : 503);
     const result = await boundedJson(response, 200000);
@@ -89,5 +92,5 @@ export async function generate(env, input, { fetcher = fetch, reserveCall = rese
     if (typeof content !== 'string' || !content.trim()) throw new RouteError('Free model returned no text.');
     return { content, model: result.model || 'openrouter/free', provider: 'openrouter', usage: result.usage || null };
   }
-  throw new RouteError(`${failures.join('; ')}. Connect an OpenRouter key for free-model fallback, or wait for reset.`, 429);
+  throw new RouteError(`${failures.join('; ')}. Connect an OpenRouter key for free-model fallback, or wait for reset.`, failures.some(f=>f.includes('exhausted')) ? 429 : 503);
 }

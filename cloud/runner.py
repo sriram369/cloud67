@@ -91,7 +91,7 @@ class Client:
         self.url=os.environ['CLOUD67_URL'].rstrip('/');self.token=os.environ['CLOUD67_RUNNER_TOKEN']
         if not self.url.startswith('https://'): raise ValueError('HTTPS required')
     def post(self,path,data):
-        req=urllib.request.Request(self.url+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json','Authorization':'Bearer '+self.token})
+        req=urllib.request.Request(self.url+path,data=json.dumps(data).encode(),headers={'Content-Type':'application/json','Authorization':'Bearer '+self.token,'User-Agent':'cloud67/0.1 (+https://github.com/sriram369/cloud67)'})
         try:
             with urllib.request.urlopen(req,timeout=120) as r:return json.load(r)
         except urllib.error.HTTPError as e:

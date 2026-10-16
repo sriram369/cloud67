@@ -23,6 +23,13 @@ test('free policy rejects paid, missing, malformed, and hidden request charges',
   for(const m of [{id:'paid',pricing:{prompt:'0',completion:'0'}},{id:'a:free',pricing:{prompt:'0',completion:'1'}},{id:'a:free',pricing:{prompt:'0',completion:'0',request:'.01'}},{id:'a:free'},{id:'a:free',pricing:{prompt:'oops',completion:'0'}}])assert.equal(isFreeModel(m),false);
 });
 test('oversized prompts are rejected before inference',()=>{assert.throws(()=>validateMessages([{role:'user',content:'x'.repeat(13000)}]),/too large/);});
+test('coding requests use a schema and accept object responses without changing chat',async()=>{
+  const seen=[];const env={DB:{},AI:{run:async(model,options)=>{seen.push(options);return {response:options.response_format?{action:'run_tests'}:'Plain chat'};}}};
+  const options={reserveCall:async()=>true};
+  const action=await generate(env,[{role:'user',content:'Run tests'}],{...options,structured:true});
+  assert.deepEqual(JSON.parse(action.content),{action:'run_tests'});assert.equal(seen[0].response_format.type,'json_schema');
+  assert.equal((await generate(env,[{role:'user',content:'hello'}],options)).content,'Plain chat');assert.equal(seen[1].response_format,undefined);
+});
 test('daily reservation fails closed and resets on a new UTC date',async()=>{const db=database();const t=Date.UTC(2026,9,16);assert.equal(await reserve(db,'cf',2,t),true);assert.equal(await reserve(db,'cf',2,t),true);assert.equal(await reserve(db,'cf',2,t),false);assert.equal(await reserve(db,'cf',2,t+86400000),true);});
 test('paid OpenRouter catalog never results in inference',async()=>{
   let calls=0;await assert.rejects(()=>generate({DB:{},OPENROUTER_API_KEY:'test'},[{role:'user',content:'hello'}],{reserveCall:async()=>false,fetcher:async()=>{calls++;return Response.json({data:[{id:'openrouter/free',pricing:{prompt:'1',completion:'1'}}]});}}),/pricing/);assert.equal(calls,1);

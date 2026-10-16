@@ -1,12 +1,22 @@
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('runner',Path(__file__).parents[1]/'runner.py')
 runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
 
 class RunnerBoundaries(unittest.TestCase):
+    def test_service_requests_identify_cloud67(self):
+        with patch.dict(runner.os.environ,{'CLOUD67_URL':'https://cloud67.example','CLOUD67_RUNNER_TOKEN':'test-only'}):
+            with patch.object(runner.urllib.request,'urlopen',return_value=io.BytesIO(b'{"task":null}')) as request:
+                self.assertEqual(runner.Client().post('/internal/claim',{}),{'task':None})
+                sent=request.call_args.args[0]
+                self.assertTrue(sent.get_header('User-agent').startswith('cloud67/'))
+                self.assertEqual(sent.get_header('Authorization'),'Bearer test-only')
+                self.assertEqual(sent.full_url,'https://cloud67.example/internal/claim')
     def test_escape_and_harness_writes_are_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve()

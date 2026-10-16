@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Identify runner HTTP requests as Cloud67 so Cloudflare accepts the service client.
+- Request structured coding actions and accept Workers AI's object response format, preventing invalid multi-action text from exhausting a task's action limit.
+- Set the shared application allowance to fifteen bounded Workers AI calls per day; Cloudflare's free account quota remains authoritative.
+
 ## 0.1.0 — 2026-10-16
 
 - Deploy an authenticated Cloudflare-native dashboard alongside the preserved Odysseus app.
