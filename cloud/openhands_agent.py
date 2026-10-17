@@ -5,6 +5,10 @@ from pathlib import Path
 import uuid
 
 os.environ.update({'OPENHANDS_SUPPRESS_BANNER':'1','LITELLM_LOCAL_MODEL_COST_MAP':'True','OTEL_SDK_DISABLED':'true','DO_NOT_TRACK':'1'})
+
+def is_repository_observation(event):
+    return type(event).__name__=='ObservationEvent' and getattr(event,'tool_name',None) in {'terminal','file_editor'}
+
 def create_agent(data):
     from pydantic import SecretStr
     from openhands.sdk import LLM,Agent,Tool
@@ -36,7 +40,9 @@ def main():
             kind='tool_call';payload=event.action.model_dump(mode='json') if event.action else {};content=json.dumps({'tool':event.tool_name,'arguments':payload})
             if getattr(event.action,'message',None):answer.append(event.action.message)
         elif isinstance(event,ObservationEvent):
-            kind='tool_result';results.append(event);text='\n'.join(c.text for c in event.observation.to_llm_content if isinstance(c,TextContent));content=json.dumps({'tool':event.tool_name,'output':text[:10000]})
+            kind='tool_result'
+            if is_repository_observation(event):results.append(event)
+            text='\n'.join(c.text for c in event.observation.to_llm_content if isinstance(c,TextContent));content=json.dumps({'tool':event.tool_name,'output':text[:10000]})
         elif isinstance(event,MessageEvent) and event.source=='agent':
             text='\n'.join(c.text for c in event.llm_message.content if isinstance(c,TextContent))
             if text:kind='assistant';content=text;answer.append(text)

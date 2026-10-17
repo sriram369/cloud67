@@ -48,6 +48,8 @@ def main():
             assert len(calls)==4
             assert any('Write sdk-proof.txt' in str(m.get('content','')) for m in calls[2]['messages'])
             assert any(type(event).__name__=='ObservationEvent' for event in events)
+            assert any(adapter.is_repository_observation(event) for event in events)
+            assert all(not adapter.is_repository_observation(event) for event in events if getattr(event,'tool_name',None)=='finish')
             second.close()
             print('OpenHands 1.55.1: file tool, native tool calls, and persisted follow-up passed (mock LLM; no provider calls).')
         finally:server.shutdown();server.server_close()
