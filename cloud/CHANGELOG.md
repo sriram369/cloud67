@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 — 2026-10-16
+
+- Search and select public repositories by name or description, with account filtering and URL entry preserved.
+- Cache a sanitized public repository catalog in D1; the trusted runner refreshes it hourly without exposing GitHub credentials or consuming model calls.
+- Reject private or out-of-account catalog entries and retain the last good catalog when refresh fails.
+
 ## 0.2.0 — 2026-10-16
 
 - Replace the custom coding loop with OpenHands SDK 1.55.1 in an isolated cloud sandbox.

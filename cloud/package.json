@@ -1,7 +1,7 @@
 {
   "name": "cloud67-free-cloud",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test test/*.test.mjs", "check": "node --check worker.mjs && node --check free-router.mjs && node --check agent-gateway.mjs && node --check conversations.mjs && node --check ui.mjs" }
+  "scripts": { "test": "node --test test/*.test.mjs", "check": "node --check worker.mjs && node --check free-router.mjs && node --check agent-gateway.mjs && node --check conversations.mjs && node --check repositories.mjs && node --check ui.mjs" }
 }
