@@ -1,5 +1,5 @@
 import { agentCompletion, AGENT_MODEL } from './agent-gateway.mjs';
-import { boundedJson, RouteError, CF_DAILY_CALLS, OPENROUTER_DAILY_CALLS } from './free-router.mjs';
+import { RouteError, CF_DAILY_CALLS, OPENROUTER_DAILY_CALLS } from './free-router.mjs';
 
 const now=()=>Math.floor(Date.now()/1000);
 const respond=(value,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
@@ -9,18 +9,30 @@ export function repositoryName(value) {
   if(!/^[a-z\d](?:[a-z\d-]{0,38})\/[a-z\d_.-]{1,100}$/i.test(name)||['.','..'].includes(name.split('/')[1]))throw new RouteError('Attach a full GitHub repository URL or owner/repository. An organization name alone is not enough.',400);
   return name;
 }
-export async function resolveRepository(value,{fetcher=fetch,token}={}) {
-  const name=repositoryName(value),headers={'User-Agent':'cloud67-openhands','Accept':'application/vnd.github+json',...(token?{Authorization:'Bearer '+token}:{})};
-  const response=await fetcher('https://api.github.com/repos/'+name,{headers,signal:AbortSignal.timeout(15000)});
-  if(response.status===404)throw new RouteError('Repository not accessible. Check the URL. Private repositories require a repository-scoped GitHub connection; the website login does not grant GitHub access.',422);
-  if(!response.ok)throw new RouteError('GitHub could not verify repository access ('+response.status+'). No job was queued.',503);
-  const repo=await boundedJson(response,100000);
-  if(!repo.full_name||!repo.default_branch||!repo.owner)throw new RouteError('GitHub returned invalid repository information.',503);
-  const ref=await fetcher('https://api.github.com/repos/'+repo.full_name+'/git/ref/heads/'+encodeURIComponent(repo.default_branch),{headers,signal:AbortSignal.timeout(15000)});
-  if(!ref.ok)throw new RouteError('Cannot read the repository default branch. No job was queued.',422);
-  const data=await boundedJson(ref,20000),sha=data.object?.sha;
-  if(!/^[a-f0-9]{40}$/.test(sha||''))throw new RouteError('GitHub returned an invalid revision.',503);
-  return {repository:repo.full_name,branch:repo.default_branch,base_sha:sha,private:Boolean(repo.private)};
+export function advertisedHead(bytes) {
+  let offset=0;const decoder=new TextDecoder();
+  while(offset+4<=bytes.length) {
+    const header=decoder.decode(bytes.subarray(offset,offset+4));
+    if(!/^[a-f\d]{4}$/i.test(header))throw new RouteError('Invalid Git reference advertisement.',503);
+    const size=parseInt(header,16);if(size<4){offset+=4;continue;}if(offset+size>bytes.length)return null;
+    const packet=decoder.decode(bytes.subarray(offset+4,offset+size));offset+=size;
+    const head=packet.match(/^([a-f\d]{40}) HEAD\0/),branch=packet.match(/symref=HEAD:refs\/heads\/([^\s\0]+)/);
+    if(head&&branch&&!/^0+$/.test(head[1]))return {branch:branch[1],base_sha:head[1]};
+  }
+  return null;
+}
+export async function resolveRepository(value,{fetcher=fetch}={}) {
+  const name=repositoryName(value);
+  // Verify the same public Git transport the sandbox will use, without REST quotas or credentials.
+  const response=await fetcher('https://github.com/'+name+'.git/info/refs?service=git-upload-pack',{headers:{'User-Agent':'cloud67-openhands','Git-Protocol':'version=0'},signal:AbortSignal.timeout(15000)});
+  if(!response.ok||!(response.headers.get('Content-Type')||'').startsWith('application/x-git-upload-pack-advertisement'))throw new RouteError('Repository not accessible. Check the URL. Private repositories require a repository-scoped GitHub connection; the website login does not grant GitHub access.',422);
+  if(response.url&&new URL(response.url).origin!=='https://github.com')throw new RouteError('Unexpected Git repository redirect.',422);
+  const reader=response.body?.getReader();if(!reader)throw new RouteError('GitHub returned no repository references.',503);
+  let bytes=new Uint8Array();
+  try {
+    while(true){const {value,done}=await reader.read();if(done)break;const next=new Uint8Array(Math.min(bytes.length+value.length,65536));next.set(bytes);next.set(value.subarray(0,next.length-bytes.length),bytes.length);bytes=next;const head=advertisedHead(bytes);if(head)return {repository:name,...head,private:false};if(bytes.length===65536)break;}
+  } finally {await reader.cancel();}
+  throw new RouteError('Cannot resolve a nonempty default branch. No job was queued.',422);
 }
 
 export async function conversationRoutes(request,env,h) {
@@ -38,7 +50,7 @@ export async function conversationRoutes(request,env,h) {
   if(path==='/api/conversations'&&request.method==='POST') {
     const input=await h.body(request),mode=input.mode||'inspect';
     if(!['inspect','edit'].includes(mode))throw new RouteError('Choose inspect or edit mode.',400);
-    const repo=await resolveRepository(input.repository,{token:env.GITHUB_READ_TOKEN});
+    const repo=await resolveRepository(input.repository);
     if(repo.private)throw new RouteError('Private sandbox checkout is not connected yet. No job was queued.',422);
     if(mode==='edit'&&repo.repository.toLowerCase()!==env.REPOSITORY.toLowerCase())throw new RouteError('Editing is currently connected only to '+env.REPOSITORY+'. Use inspect mode for another public repository.',422);
     const test=input.test_command?validText(input.test_command,300,'test command'):null;

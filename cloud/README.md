@@ -15,7 +15,7 @@ The frontend is Cloud67's own conversation client. This deployment uses the Open
 
 ## User flow
 
-1. Attach a full GitHub repository URL. Cloud67 verifies access and pins its default-branch revision before creating the conversation. An unresolved name such as `frd02` produces an actionable error and does not queue work.
+1. Attach a full GitHub repository URL. Cloud67 verifies anonymous Git access and reads the advertised default-branch revision before creating the conversation. This uses Git's public clone transport rather than depending on a shared anonymous REST API quota. An unresolved name such as `frd02` produces an actionable error and does not queue work.
 2. Choose **inspect**, which mounts the public repository read-only, or **edit**, which currently supports the connected `sriram369/cloud67` repository and requires an owner-specified verification command.
 3. Send a message. OpenHands executes a conversation turn in the cloud. Actual tool calls, results, model usage, verification, and publication appear in Activity.
 4. Send follow-ups in the same conversation. SDK state and workspace patches are restored into a fresh sandbox at the same repository revision.
