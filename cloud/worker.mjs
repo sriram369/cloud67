@@ -80,6 +80,8 @@ async function handle(request, env) {
   } else if (!/^\/agent\/[a-f0-9-]+\/v1\/chat\/completions$/.test(path) && !await authenticated(request,env)) throw new RouteError('Sign in to your workspace.',401);
   const conversationResponse=await conversationRoutes(request,env,{body,query,digest,sameSecret});
   if(conversationResponse)return conversationResponse;
+  if(request.method==='POST'&&(path==='/api/tasks'||path==='/api/threads'||/^\/api\/threads\/[a-f0-9-]+\/messages$/.test(path)))throw new RouteError('The prototype task/chat API is retired. Refresh Cloud67 and start an OpenHands repository conversation. Your previous history is preserved.',410);
+  if(path==='/internal/claim')return reply({task:null,repository:env.REPOSITORY,retired:true});
   if (path === '/api/logout' && request.method === 'POST') return reply({ok:true},200,{'Set-Cookie':'cloud67=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
   if (path === '/api/state' && request.method === 'GET') {
     const day = new Date().toISOString().slice(0,10);

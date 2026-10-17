@@ -27,6 +27,8 @@ Private repository sandbox checkout is not connected. Another public repository 
 
 Earlier prototype tasks and their failures remain in **Earlier prototype runs**. They are not represented as successful OpenHands conversations. The unresolved `frd02` request is preserved with an explanation that its repository URL is needed.
 
+Retired task/chat creation endpoints return HTTP 410 with refresh instructions. The old runner claim endpoint returns an empty, retired response, so cached clients and old scheduled jobs cannot create or execute more prototype work.
+
 ## Checks
 
 ```sh
