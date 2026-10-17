@@ -8,9 +8,6 @@ on:
   schedule:
     - cron: '3-58/5 * * * *'
 permissions: {}
-concurrency:
-  group: cloud67-coding-runner
-  cancel-in-progress: false
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -29,13 +26,18 @@ jobs:
           node --test cloud/test/*.test.mjs
           python3 -m unittest discover -s cloud/test -p 'test_*.py' -v
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         with:
           python-version: '3.13'
       - name: Verify actual OpenHands SDK and conversation persistence
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
           pip install --quiet openhands-sdk==1.55.1 openhands-tools==1.55.1 litellm==1.93.0
           python cloud/test/sdk_smoke.py
   run-task:
+    concurrency:
+      group: cloud67-openhands-execution
+      cancel-in-progress: false
     needs: verify
     if: github.repository == 'sriram369/cloud67' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
