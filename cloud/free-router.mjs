@@ -35,7 +35,7 @@ export async function reserve(db, provider, limit, now = Date.now()) {
   return Boolean(row);
 }
 
-async function boundedJson(response, limit = 2_000_000) {
+export async function boundedJson(response, limit = 2_000_000) {
   const reader = response.body?.getReader();
   if (!reader) throw new RouteError('Provider returned an empty response.');
   const parts = []; let length = 0;

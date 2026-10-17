@@ -1,0 +1,9 @@
+FROM python:3.13-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git tmux ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir openhands-sdk==1.55.1 openhands-tools==1.55.1 litellm==1.93.0 \
+    'nodejs-wheel-binaries>=24,<25' pytest==9.0.3
+RUN groupadd --gid 1001 agent && useradd --uid 1001 --gid 1001 --create-home agent
+USER agent
+WORKDIR /workspace
+ENV OPENHANDS_SUPPRESS_BANNER=1 LITELLM_LOCAL_MODEL_COST_MAP=True OTEL_SDK_DISABLED=true DO_NOT_TRACK=1
