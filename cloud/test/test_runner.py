@@ -1,6 +1,9 @@
 import importlib.util
 import io
+import json
+import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,30 +13,54 @@ runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
 
 class RunnerBoundaries(unittest.TestCase):
     def test_service_requests_identify_cloud67(self):
-        with patch.dict(runner.os.environ,{'CLOUD67_URL':'https://cloud67.example','CLOUD67_RUNNER_TOKEN':'test-only'}):
-            with patch.object(runner.urllib.request,'urlopen',return_value=io.BytesIO(b'{"task":null}')) as request:
-                self.assertEqual(runner.Client().post('/internal/claim',{}),{'task':None})
+        with patch.dict(os.environ,{'CLOUD67_URL':'https://cloud67.example','CLOUD67_RUNNER_TOKEN':'test-only'}):
+            with patch.object(runner.urllib.request,'urlopen',return_value=io.BytesIO(b'{"turn":null}')) as request:
+                self.assertEqual(runner.Client().post('/internal/v2/claim',{}),{'turn':None})
                 sent=request.call_args.args[0]
                 self.assertTrue(sent.get_header('User-agent').startswith('cloud67/'))
                 self.assertEqual(sent.get_header('Authorization'),'Bearer test-only')
-                self.assertEqual(sent.full_url,'https://cloud67.example/internal/claim')
-    def test_escape_and_harness_writes_are_denied(self):
+
+    def test_checkpoint_traversal_and_symlinks_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp).resolve()
-            for path in ['../../.env','cloud/worker.mjs','/etc/passwd','cloud/agent-workspace/../../runner.py']:
-                with self.assertRaises(ValueError):runner.workspace_path(root,path,write=True)
-            self.assertEqual(runner.workspace_path(root,'cloud/agent-workspace/util.py',write=True),root/'cloud/agent-workspace/util.py')
-    def test_symlink_escape_is_denied(self):
+            root=Path(tmp)/'state';root.mkdir();(root/'escape').symlink_to(root.parent)
+            for name in ['../secret','/etc/passwd','escape/secret']:
+                with self.assertRaises(ValueError):runner.restore_state(root,{'files':{name:'bad'}})
+            runner.restore_state(root,{'files':{'conversation/base_state.json':'{}'}})
+            self.assertEqual((root/'conversation/base_state.json').read_text(),'{}')
+
+    def test_model_token_is_removed_from_checkpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp);(root/runner.SCOPE).mkdir(parents=True)
-            (root/runner.SCOPE/'link').symlink_to('/tmp')
-            with self.assertRaises(ValueError):runner.workspace_path(root,'cloud/agent-workspace/link/x.py',write=True)
-    def test_only_known_actions_and_python_writes(self):
-        with self.assertRaises(ValueError):runner.parse_action('{"action":"shell","command":"printenv"}')
+            root=Path(tmp);(root/'event.json').write_text(json.dumps({'text':'temporary-model-token'}))
+            self.assertNotIn('temporary-model-token',json.dumps(runner.snapshot(root,'temporary-model-token')))
+
+    def test_sandbox_credentials_and_write_modes(self):
+        root=Path('/tmp/repository');state=Path('/tmp/state');control=Path('/tmp/control')
+        with patch.dict(os.environ,{'GH_TOKEN':'publisher-secret','CLOUD67_RUNNER_TOKEN':'runner-secret'}):
+            inspect=runner.sandbox_args('test',root,state,control,'inspect')
+            edit=runner.sandbox_args('test',root,state,control,'edit')
+            self.assertIn('/tmp/repository:/workspace:ro',inspect)
+            self.assertIn('/tmp/repository:/workspace:rw',edit)
+            self.assertIn('/tmp/repository/.git:/workspace/.git:ro',edit)
+            self.assertIn('--cap-drop',inspect)
+            self.assertNotIn('publisher-secret',' '.join(inspect))
+            self.assertNotIn('runner-secret',' '.join(inspect))
+            self.assertIn('none',runner.sandbox_args('test',root,state,control,'inspect',network=False))
+
+    def test_repository_input_cannot_be_a_command_or_other_host(self):
+        for value in ['https://evil.example/repo','owner/repo;printenv','owner/../secret','owner/..']:
+            with self.assertRaises(ValueError):runner.repository_url(value)
+        self.assertEqual(runner.repository_url('owner/repo'),'https://github.com/owner/repo.git')
+
+    def test_generated_process_output_is_bounded(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(ValueError):runner.workspace_path(Path(tmp),'cloud/agent-workspace/run.sh',write=True)
-    def test_no_test_files_is_a_failure(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaisesRegex(ValueError,'At least one test'):runner.execute(Path(tmp),{'action':'run_tests'})
+            with self.assertRaisesRegex(RuntimeError,'bounded output'):
+                runner.run([sys.executable,'-c',"print('x'*500000)"],Path(tmp))
+
+    def test_workflow_and_secret_paths_cannot_be_published(self):
+        for name in ['.github/workflows/pwn.yml','.env','.env.production','service/private.key']:
+            with patch.object(runner,'run',return_value=name+'\0'):
+                with self.assertRaises(ValueError):runner.publication_files(Path('/tmp'))
+        with patch.object(runner,'run',return_value='src/app.ts\0tests/app.test.ts\0'):
+            self.assertEqual(len(runner.publication_files(Path('/tmp'))),2)
 
 if __name__=='__main__':unittest.main()

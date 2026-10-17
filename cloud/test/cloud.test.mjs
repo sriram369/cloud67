@@ -38,12 +38,13 @@ test('fallback sends only the free router and zero price bounds',async()=>{
   const seen=[];const r=await generate({DB:{},AI:{run:async()=>{throw Error('outage');}},OPENROUTER_API_KEY:'test'},[{role:'user',content:'hello'}],{reserveCall:async()=>true,fetcher:async(url,init)=>{seen.push({url,init});return seen.length===1?Response.json({data:[{id:'openrouter/free',pricing:{prompt:'0',completion:'0'}}]}):Response.json({model:'some:free',choices:[{message:{content:'hello'}}]});}});assert.equal(r.content,'hello');const sent=JSON.parse(seen[1].init.body);assert.equal(sent.model,'openrouter/free');assert.deepEqual(sent.provider.max_price,{prompt:0,completion:0});
 });
 test('owner authentication, CSRF and tampered cookies are enforced',async()=>{const env=await environment();assert.equal((await worker.fetch(request('/api/state'),env)).status,401);assert.equal((await worker.fetch(request('/api/login','POST',{password:'wrong'}),env)).status,401);const cookie=await login(env);assert.equal((await worker.fetch(request('/api/state','GET',undefined,cookie),env)).status,200);assert.equal((await worker.fetch(request('/api/state','GET',undefined,cookie+'bad'),env)).status,401);const cross=request('/api/tasks','POST',{instruction:'test'},cookie);cross.headers.set('Origin','https://evil.example');assert.equal((await worker.fetch(cross,env)).status,403);});
-test('thread chat persists messages and records the model',async()=>{const env=await environment(),cookie=await login(env);let r=await worker.fetch(request('/api/threads','POST',{title:'A test'},cookie),env);const {id}=await r.json();r=await worker.fetch(request('/api/threads/'+id+'/messages','POST',{content:'hello'},cookie),env);assert.equal(r.status,200);r=await worker.fetch(request('/api/threads/'+id+'/messages','GET',undefined,cookie),env);const d=await r.json();assert.equal(d.messages.length,2);assert.match(d.messages[1].model,/llama/);});
-test('queue claims are exclusive and cancellation fences the model endpoint',async()=>{
-  const env=await environment(),cookie=await login(env);const task=await (await worker.fetch(request('/api/tasks','POST',{instruction:'Write tests'},cookie),env)).json();
-  const internal=(path,data)=>{const req=request(path,'POST',data||{});req.headers.set('Authorization','Bearer test-runner');return worker.fetch(req,env);};
-  const claimed=await (await internal('/internal/claim')).json();assert.equal(claimed.task.id,task.id);assert.equal((await (await internal('/internal/claim')).json()).task,null);
-  const bad=await internal('/internal/tasks/'+task.id+'/model',{lease:'wrong',messages:[{role:'user',content:'hello'}]});assert.equal(bad.status,409);
-  await worker.fetch(request('/api/tasks/'+task.id+'/cancel','POST',{},cookie),env);
-  const cancelled=await internal('/internal/tasks/'+task.id+'/model',{lease:claimed.task.lease,messages:[{role:'user',content:'hello'}]});assert.equal(cancelled.status,409);
+test('retired prototype writes cannot queue work or consume inference',async()=>{
+  const env=await environment(),cookie=await login(env);let inference=0;env.AI.run=async()=>{inference++;return {response:'should not run'};};
+  for(const [path,data] of [['/api/tasks',{instruction:'frd02'}],['/api/threads',{title:'old chat'}],['/api/threads/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/messages',{content:'old message'}]]) {
+    const response=await worker.fetch(request(path,'POST',data,cookie),env);assert.equal(response.status,410);assert.match((await response.json()).error,/Refresh Cloud67/);
+  }
+  assert.equal(inference,0);assert.equal((await env.DB.prepare('SELECT count(*) AS n FROM tasks').bind().first()).n,0);
+});
+test('old scheduled workflows cannot claim or execute prototype tasks',async()=>{
+  const env=await environment();const req=request('/internal/claim','POST',{});req.headers.set('Authorization','Bearer test-runner');const response=await worker.fetch(req,env);assert.equal(response.status,200);assert.deepEqual(await response.json(),{task:null,repository:'sriram369/cloud67',retired:true});
 });

@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-16
+
+- Replace the custom coding loop with OpenHands SDK 1.55.1 in an isolated cloud sandbox.
+- Make repository conversations, follow-ups, tool activity, and workspace diffs the primary interface.
+- Verify repository access before queuing; retain unresolved prototype requests as history.
+- Persist actual SDK checkpoints and workspace patches across cloud jobs.
+- Add a scoped native-tool model gateway using Workers AI Qwen3 30B and optional verified free-only OpenRouter fallback.
+- Separate read-only inspection from edits, independently verify edits, and keep publishing credentials outside agent execution.
+- Add conversation, credential boundary, checkpoint, and actual SDK persistence tests.
+
+## 0.1.1 — 2026-10-16
 
 - Identify runner HTTP requests as Cloud67 so Cloudflare accepts the service client.
 - Request structured coding actions and accept Workers AI's object response format, preventing invalid multi-action text from exhausting a task's action limit.

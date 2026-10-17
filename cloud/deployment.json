@@ -9,6 +9,6 @@
   },
   "vars": {
     "REPOSITORY": "sriram369/cloud67",
-    "RUNNER_ENABLED": "false"
+    "RUNNER_ENABLED": "true"
   }
 }

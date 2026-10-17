@@ -1,5 +1,6 @@
 import { HTML, CLIENT } from './ui.mjs';
 import { generate, RouteError, CF_DAILY_CALLS, OPENROUTER_DAILY_CALLS } from './free-router.mjs';
+import { conversationRoutes } from './conversations.mjs';
 
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now() / 1000);
@@ -53,7 +54,7 @@ async function handle(request, env) {
   const url = new URL(request.url), path = url.pathname;
   if (request.method === 'GET' && path === '/') return new Response(HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' } });
   if (request.method === 'GET' && path === '/app.js') return new Response(CLIENT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } });
-  if (request.method === 'GET' && path === '/api/health') return reply({ name:'cloud67',version:'0.1.0',status:'ok',edition:'free-cloud',execution:'github-actions',paidFallback:false });
+  if (request.method === 'GET' && path === '/api/health') return reply({ name:'cloud67',version:'0.2.0',status:'ok',edition:'free-cloud',execution:'github-actions',paidFallback:false });
   if (!env.SESSION_SECRET || !env.ADMIN_PASSWORD_HASH) throw new RouteError('Cloud67 is not configured.', 503);
   if (request.method !== 'GET') {
     const origin = request.headers.get('Origin');
@@ -76,7 +77,11 @@ async function handle(request, env) {
     const token = request.headers.get('Authorization')?.replace(/^Bearer /,'') || '';
     if (!env.RUNNER_TOKEN || !token || !await sameSecret(env, env.RUNNER_TOKEN, token)) throw new RouteError('Runner authentication required.',401);
     if (request.method !== 'POST') throw new RouteError('Method not allowed.',405);
-  } else if (!await authenticated(request,env)) throw new RouteError('Sign in to your workspace.',401);
+  } else if (!/^\/agent\/[a-f0-9-]+\/v1\/chat\/completions$/.test(path) && !await authenticated(request,env)) throw new RouteError('Sign in to your workspace.',401);
+  const conversationResponse=await conversationRoutes(request,env,{body,query,digest,sameSecret});
+  if(conversationResponse)return conversationResponse;
+  if(request.method==='POST'&&(path==='/api/tasks'||path==='/api/threads'||/^\/api\/threads\/[a-f0-9-]+\/messages$/.test(path)))throw new RouteError('The prototype task/chat API is retired. Refresh Cloud67 and start an OpenHands repository conversation. Your previous history is preserved.',410);
+  if(path==='/internal/claim')return reply({task:null,repository:env.REPOSITORY,retired:true});
   if (path === '/api/logout' && request.method === 'POST') return reply({ok:true},200,{'Set-Cookie':'cloud67=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'});
   if (path === '/api/state' && request.method === 'GET') {
     const day = new Date().toISOString().slice(0,10);
@@ -175,7 +180,9 @@ export default {
     catch(error) {
       const status=error instanceof RouteError?error.status:500;
       console.error(JSON.stringify({event:'request_error',path:new URL(request.url).pathname,status}));
-      response=reply({error:status===500?'An internal error occurred.':error.message},status);
+      const message=status===500?'An internal error occurred.':error.message;
+      const agentPath=/^\/agent\/[a-f0-9-]+\/v1\/chat\/completions$/.test(new URL(request.url).pathname);
+      response=reply({error:agentPath?{message,type:status===429?'rate_limit_error':'api_error',code:String(status)}:message},status);
     }
     const headers=new Headers(response.headers);
     headers.set('X-Content-Type-Options','nosniff');
