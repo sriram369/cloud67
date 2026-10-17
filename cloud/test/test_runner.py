@@ -12,6 +12,28 @@ spec=importlib.util.spec_from_file_location('runner',Path(__file__).parents[1]/'
 runner=importlib.util.module_from_spec(spec);spec.loader.exec_module(runner)
 
 class RunnerBoundaries(unittest.TestCase):
+    def test_public_catalog_paginates_and_excludes_private_or_foreign_repositories(self):
+        calls=[]
+        def fetcher(path):
+            calls.append(path)
+            if '?' not in path:return {'type':'Organization' if path.endswith('/team') else 'User'}
+            if '/orgs/' in path:return [{'full_name':'team/project','private':False}]
+            if 'page=2' in path:return [{'full_name':'owner/last','private':False},{'full_name':'owner/private','private':True},{'full_name':'other/repo','private':False}]
+            return [{'full_name':f'owner/repo{i}','private':False} for i in range(100)]
+        result=runner.github_catalog(['owner','team'],fetcher)
+        self.assertEqual(len(result['repositories']),102)
+        self.assertIn('/users/owner/repos?type=owner&sort=updated&per_page=100&page=2',calls)
+        self.assertTrue(any('/orgs/team/repos?type=public' in c for c in calls))
+        self.assertNotIn('owner/private',json.dumps(result))
+        with self.assertRaises(ValueError):runner.github_catalog(['owner/../../secrets'],fetcher)
+
+    def test_catalog_refresh_failure_retains_history_without_disclosing_error_credentials(self):
+        class Offline:
+            def post(self,*args):raise RuntimeError('secret-token-value')
+        with patch('sys.stdout',new_callable=io.StringIO) as output:
+            runner.sync_repositories(Offline())
+            self.assertNotIn('secret-token-value',output.getvalue())
+
     def test_service_requests_identify_cloud67(self):
         with patch.dict(os.environ,{'CLOUD67_URL':'https://cloud67.example','CLOUD67_RUNNER_TOKEN':'test-only'}):
             with patch.object(runner.urllib.request,'urlopen',return_value=io.BytesIO(b'{"turn":null}')) as request:

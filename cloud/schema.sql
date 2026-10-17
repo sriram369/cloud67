@@ -49,3 +49,6 @@ CREATE INDEX IF NOT EXISTS agent_events_turn ON agent_events(turn_id,id);
 CREATE TABLE IF NOT EXISTS conversation_checkpoints (
   conversation_id TEXT PRIMARY KEY REFERENCES conversations(id), payload TEXT NOT NULL, updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS repository_catalog (
+  id TEXT PRIMARY KEY CHECK(id='public'), payload TEXT NOT NULL, updated_at INTEGER NOT NULL
+);

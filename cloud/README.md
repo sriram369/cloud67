@@ -15,7 +15,9 @@ The frontend is Cloud67's own conversation client. This deployment uses the Open
 
 ## User flow
 
-1. Attach a full GitHub repository URL. Cloud67 verifies anonymous Git access and reads the advertised default-branch revision before creating the conversation. This uses Git's public clone transport rather than depending on a shared anonymous REST API quota. An unresolved name such as `frd02` produces an actionable error and does not queue work.
+1. Search the repository picker by name or description, optionally filter by account, and select a public repository. Pasting a full GitHub URL still works. The picker uses a bounded D1 catalog refreshed hourly by the existing trusted GitHub runner; a GitHub outage retains the last successful list. Catalog search does not use inference or expose a GitHub token. Private repositories are excluded.
+
+   Cloud67 checks the selected repository by verifying anonymous Git access and reads the advertised default-branch revision before creating the conversation. This uses Git's public clone transport rather than depending on a shared anonymous REST API quota. An unresolved name such as `frd02` produces an actionable error and does not queue work.
 2. Choose **inspect**, which mounts the public repository read-only, or **edit**, which currently supports the connected `sriram369/cloud67` repository and requires an owner-specified verification command.
 3. Send a message. OpenHands executes a conversation turn in the cloud. Actual tool calls, results, model usage, verification, and publication appear in Activity.
 4. Send follow-ups in the same conversation. SDK state and workspace patches are restored into a fresh sandbox at the same repository revision.
@@ -42,9 +44,9 @@ The SDK smoke test uses a local mock LLM and actual SDK file tools to check nati
 
 ## Deploy and operate
 
-Apply the additive `schema.sql` migration to D1. Upload ESM modules `worker.mjs`, `ui.mjs`, `free-router.mjs`, `agent-gateway.mjs`, and `conversations.mjs`. Preserve existing bindings and secret values on updates.
+Apply the additive `schema.sql` migration to D1. Upload ESM modules `worker.mjs`, `ui.mjs`, `free-router.mjs`, `agent-gateway.mjs`, `conversations.mjs`, and `repositories.mjs`. Preserve existing bindings and secret values on updates.
 
-Bindings: `DB`, `AI`, `REPOSITORY`, `RUNNER_ENABLED`, `ADMIN_PASSWORD_HASH`, `SESSION_SECRET`, `RUNNER_TOKEN`. Optional: `OPENROUTER_API_KEY`. GitHub repository variable `CLOUD67_URL` and secret `CLOUD67_RUNNER_TOKEN` connect the trusted controller. Its workflow requests contents-write permission for publication and no PR-review approval permission.
+Bindings: `DB`, `AI`, `REPOSITORY`, `RUNNER_ENABLED`, `ADMIN_PASSWORD_HASH`, `SESSION_SECRET`, `RUNNER_TOKEN`. Optional: `OPENROUTER_API_KEY`. GitHub repository variable `CLOUD67_URL` and secret `CLOUD67_RUNNER_TOKEN` connect the trusted controller. Optional repository variable `CLOUD67_GITHUB_ACCOUNTS` is a comma-separated list of up to ten accounts to index (default: repository owner); only their public repositories are included. The catalog is capped at 1,000 entries, and a failed or oversized refresh retains the previous list. Its workflow requests contents-write permission for publication and no PR-review approval permission.
 
 The sandbox model key is scoped to one active turn and grants only bounded model requests. Cancellation fences new requests; the trusted controller checks the lease every five seconds while the agent runs. Code cannot mount a Docker socket or access the host filesystem. Git metadata is mounted read-only. Sandbox network access is available for model calls and public dependencies; no platform credentials are exposed there. Verification runs with networking disabled.
 
@@ -58,6 +60,7 @@ Disable the workflow to stop execution. D1 retains history and checkpoints. Roll
 - [OpenHands architecture](https://docs.openhands.dev/overview/introduction).
 - [Odysseus](https://github.com/odysseus-dev/odysseus), preserved AGPL-3.0-or-later foundation; see the repository license and provenance files.
 - [Workers AI model](https://developers.cloudflare.com/workers-ai/models/qwen3-30b-a3b-fp8/).
+- [GitHub repository listing API](https://docs.github.com/en/rest/repos/repos#list-repositories-for-a-user).
 - [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
 Cloud67 remains an AGPL-3.0-or-later fork; using the MIT SDK does not remove the existing project's notices.

@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 import worker,{digest} from '../worker.mjs';
 import {repositoryName,resolveRepository,advertisedHead} from '../conversations.mjs';
 import {agentCompletion,agentInput,AGENT_MODEL} from '../agent-gateway.mjs';
+import {publicCatalog} from '../repositories.mjs';
 
 function database(){const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));return {prepare:sql=>({bind(...params){return {first:async()=>db.prepare(sql).get(...params)||null,all:async()=>({results:db.prepare(sql).all(...params)}),run:async()=>db.prepare(sql).run(...params)};}})};}
 async function env(){return {DB:database(),REPOSITORY:'sriram369/cloud67',RUNNER_ENABLED:'true',SESSION_SECRET:'test-session-secret',ADMIN_PASSWORD_HASH:await digest('test-password'),RUNNER_TOKEN:'test-runner',AI:{run:async()=>({choices:[{message:{content:'Repository evidence'}}],usage:{prompt_tokens:10,completion_tokens:3,total_tokens:13}})}};}
@@ -15,6 +16,27 @@ const advertisement=packet('# service=git-upload-pack\n')+'0000'+packet('a'.repe
 const github=async()=>new Response(advertisement,{headers:{'Content-Type':'application/x-git-upload-pack-advertisement'}});
 async function create(t,e,auth){t.mock.method(globalThis,'fetch',github);const r=await worker.fetch(request('/api/conversations',{repository:'https://github.com/sriram369/cloud67',mode:'inspect'},auth),e);assert.equal(r.status,201);return r.json();}
 const internal=(e,path,data={})=>worker.fetch(request(path,data,{token:'test-runner'}),e);
+
+test('repository catalog is workspace-authenticated and only trusted runner can update it',async()=>{
+  const e=await env(),auth=await login(e);
+  assert.equal((await worker.fetch(request('/api/repositories'),e)).status,401);
+  assert.equal((await worker.fetch(request('/internal/repositories/sync',{},auth),e)).status,401);
+  const payload={accounts:['sriram369','example-org'],repositories:[{full_name:'sriram369/cloud67',private:false,description:'Agent workspace',language:'Python',html_url:'https://evil.example',token:'must-not-store'},{full_name:'example-org/demo',private:false}]};
+  assert.equal((await internal(e,'/internal/repositories/sync',payload)).status,200);
+  const result=await (await worker.fetch(request('/api/repositories',undefined,auth),e)).json();
+  assert.equal(result.repositories.length,2);assert.equal(result.public_only,true);assert.ok(result.updated_at>0);
+  assert.ok(!JSON.stringify(result).includes('must-not-store'));assert.ok(!JSON.stringify(result).includes('evil.example'));
+  assert.equal((await (await internal(e,'/internal/repositories/status')).json()).updated_at,result.updated_at);
+});
+test('private, out-of-account and malformed catalog entries are rejected without replacing saved results',async()=>{
+  const e=await env(),auth=await login(e);
+  const payload={accounts:['sriram369'],repositories:[{full_name:'sriram369/cloud67',private:false}]};
+  await internal(e,'/internal/repositories/sync',payload);
+  for(const bad of [{full_name:'sriram369/private',private:true},{full_name:'other/repo',private:false},{full_name:'sriram369/..',private:false}])assert.equal((await internal(e,'/internal/repositories/sync',{...payload,repositories:[bad]})).status,400);
+  const saved=await (await worker.fetch(request('/api/repositories',undefined,auth),e)).json();assert.equal(saved.repositories[0].full_name,'sriram369/cloud67');
+  assert.throws(()=>publicCatalog({accounts:['owner/../../'],repositories:[]}));
+  assert.throws(()=>publicCatalog({...payload,repositories:[payload.repositories[0],payload.repositories[0]]}));
+});
 
 test('public Git access resolves a streamed HEAD without depending on REST quotas',async()=>{const bytes=new TextEncoder().encode(advertisement);assert.equal(advertisedHead(bytes.subarray(0,12)),null);assert.throws(()=>advertisedHead(new TextEncoder().encode('xxxx')),/Invalid Git/);let url;const result=await resolveRepository('owner/repo',{fetcher:async value=>{url=value;return new Response(new ReadableStream({start(c){c.enqueue(bytes.subarray(0,13));c.enqueue(bytes.subarray(13));c.close();}}),{headers:{'Content-Type':'application/x-git-upload-pack-advertisement'}});}});assert.equal(url,'https://github.com/owner/repo.git/info/refs?service=git-upload-pack');assert.deepEqual(result,{repository:'owner/repo',branch:'dev',base_sha:'a'.repeat(40),private:false});});
 

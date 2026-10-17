@@ -18,6 +18,39 @@ PROTECTED=('.github/','.git/','.cloud67/','.aws/','.ssh/','.venv/','node_modules
 
 def bounded(value,size=12000):return str(value).encode()[:size].decode(errors='ignore')
 
+def github_catalog(accounts,fetcher):
+    if not accounts or len(accounts)>10 or any(not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9-]{0,38}',a) for a in accounts):raise ValueError('Invalid GitHub accounts')
+    repositories=[];seen=set()
+    for account in accounts:
+        kind='orgs' if fetcher('/users/'+account).get('type')=='Organization' else 'users'
+        for page in range(1,12):
+            rows=fetcher(f'/{kind}/{account}/repos?type={"public" if kind=="orgs" else "owner"}&sort=updated&per_page=100&page={page}')
+            if not isinstance(rows,list):raise ValueError('Invalid GitHub repository response')
+            for row in rows:
+                name=row.get('full_name','');key=name.lower()
+                if row.get('private') is not False or name.split('/')[0].lower()!=account.lower() or key in seen:continue
+                seen.add(key);repositories.append({k:row.get(k) for k in ('full_name','description','language','fork','archived','updated_at','private')})
+            if len(repositories)>1000:raise ValueError('Public repository catalog exceeds 1000 entries')
+            if len(rows)<100:break
+        else:raise ValueError('Repository pagination limit reached')
+    return {'accounts':accounts,'repositories':repositories}
+
+def sync_repositories(client):
+    try:
+        if client.post('/internal/repositories/status',{}).get('updated_at',0)>time.time()-3600:return
+        accounts=list(dict.fromkeys(a.strip() for a in os.environ.get('CLOUD67_GITHUB_ACCOUNTS',os.environ['GITHUB_REPOSITORY'].split('/')[0]).split(',') if a.strip()))
+        def fetcher(path):
+            req=urllib.request.Request('https://api.github.com'+path,headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN'],'User-Agent':'cloud67-repositories','X-GitHub-Api-Version':'2026-03-10'})
+            with urllib.request.urlopen(req,timeout=20) as response:
+                raw=response.read(2000001)
+                if len(raw)>2000000:raise ValueError('GitHub response exceeds limit')
+                return json.loads(raw)
+        result=client.post('/internal/repositories/sync',github_catalog(accounts,fetcher))
+        print('Public repository catalog refreshed:',result['count'])
+    except Exception:
+        # Catalog outages must not block coding turns or disclose credentials from errors.
+        print('Public repository catalog refresh unavailable; retaining the last successful list.')
+
 class Client:
     def __init__(self):
         self.url=os.environ['CLOUD67_URL'].rstrip('/');self.token=os.environ['CLOUD67_RUNNER_TOKEN']
@@ -129,7 +162,7 @@ def publish(root,conversation,turn,client):
     return 'https://github.com/'+conversation['repository']+'/compare/'+conversation['branch']+'...'+branch+'?expand=1'
 
 def main():
-    client=Client();claimed=client.post('/internal/v2/claim',{});turn=claimed.get('turn')
+    client=Client();sync_repositories(client);claimed=client.post('/internal/v2/claim',{});turn=claimed.get('turn')
     if not turn:print('No queued OpenHands conversation.');return
     if not re.fullmatch(r'[a-f0-9-]{36}',turn['id']):raise ValueError('Invalid run identifier')
     conversation=claimed['conversation'];base='/internal/v2/turns/'+turn['id'];lease={'lease':turn['lease']};source=Path(__file__).resolve().parent

@@ -1,6 +1,7 @@
 import { HTML, CLIENT } from './ui.mjs';
 import { generate, RouteError, CF_DAILY_CALLS, OPENROUTER_DAILY_CALLS } from './free-router.mjs';
 import { conversationRoutes } from './conversations.mjs';
+import { repositoryRoutes } from './repositories.mjs';
 
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now() / 1000);
@@ -54,7 +55,7 @@ async function handle(request, env) {
   const url = new URL(request.url), path = url.pathname;
   if (request.method === 'GET' && path === '/') return new Response(HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' } });
   if (request.method === 'GET' && path === '/app.js') return new Response(CLIENT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } });
-  if (request.method === 'GET' && path === '/api/health') return reply({ name:'cloud67',version:'0.2.0',status:'ok',edition:'free-cloud',execution:'github-actions',paidFallback:false });
+  if (request.method === 'GET' && path === '/api/health') return reply({ name:'cloud67',version:'0.2.1',status:'ok',edition:'free-cloud',execution:'github-actions',paidFallback:false });
   if (!env.SESSION_SECRET || !env.ADMIN_PASSWORD_HASH) throw new RouteError('Cloud67 is not configured.', 503);
   if (request.method !== 'GET') {
     const origin = request.headers.get('Origin');
@@ -78,6 +79,8 @@ async function handle(request, env) {
     if (!env.RUNNER_TOKEN || !token || !await sameSecret(env, env.RUNNER_TOKEN, token)) throw new RouteError('Runner authentication required.',401);
     if (request.method !== 'POST') throw new RouteError('Method not allowed.',405);
   } else if (!/^\/agent\/[a-f0-9-]+\/v1\/chat\/completions$/.test(path) && !await authenticated(request,env)) throw new RouteError('Sign in to your workspace.',401);
+  const repositoryResponse=await repositoryRoutes(request,env,{body,query});
+  if(repositoryResponse)return repositoryResponse;
   const conversationResponse=await conversationRoutes(request,env,{body,query,digest,sameSecret});
   if(conversationResponse)return conversationResponse;
   if(request.method==='POST'&&(path==='/api/tasks'||path==='/api/threads'||/^\/api\/threads\/[a-f0-9-]+\/messages$/.test(path)))throw new RouteError('The prototype task/chat API is retired. Refresh Cloud67 and start an OpenHands repository conversation. Your previous history is preserved.',410);

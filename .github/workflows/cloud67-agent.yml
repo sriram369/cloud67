@@ -53,5 +53,6 @@ jobs:
           CLOUD67_URL: ${{ vars.CLOUD67_URL }}
           CLOUD67_RUNNER_TOKEN: ${{ secrets.CLOUD67_RUNNER_TOKEN }}
           CLOUD67_BASE_BRANCH: dev
+          CLOUD67_GITHUB_ACCOUNTS: ${{ vars.CLOUD67_GITHUB_ACCOUNTS || github.repository_owner }}
           GH_TOKEN: ${{ github.token }}
         run: python3 cloud/runner.py
